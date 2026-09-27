@@ -1,145 +1,213 @@
 <div align="center">
 
-# 🤖 Kintara Bot
+# Multi Runner
 
-### a **RY GROUP** project
+Automation toolkit with **multi-account support** and Telegram control.
+Headless, no browser, no cookie handling — just keys in, commands out.
 
-Production-ready, **headless** automation for [Kintara.gg](https://kintara.gg).
-No browser. No cookie babysitting. Just wallet login, Telegram control, and a clean one-line install.
-
-🎣 Fishing · 🍳 Cooking · 🪓 Woodcutting · ⛏ Mining (stone/coal/metal) · ⚔️ Combat · 🏦 Banking · 💰 Marketplace · 🎡 Daily Spinner · 📋 Daily Quests · 🧠 Auto-Orchestrator
+🎣 · 🍳 · 🪓 · ⛏ · ⚔️ · 🏦 · 💰 · 🎡 · 📋 · 🧠
 
 [![Node](https://img.shields.io/badge/node-%3E%3D18-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
 
-## ⚡ One-line Install
+## What's different here
+
+This build adds a **multi-account layer** on top of a headless runner:
+
+- **One Telegram bot controls many accounts** — broadcast commands to all at once
+- **Per-account proxy** (`socks5` / `http`) so each account exits from a different IP
+- **Per-account shard** — accounts are spread across servers automatically
+- **Zone & shard rotation** — when a resource zone goes dry, the runner moves (zone → next zone → next shard) instead of waiting forever
+- **Auto-bank** — resources are deposited when inventory hits the threshold
+- **Accurate on-chain token check** — reads **Token-2022** accounts too (a classic-token-only check reports `0` and is wrong)
+
+## Requirements
+
+- Node.js ≥ 18
+- Accounts with valid private keys (base58)
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Linux VPS recommended for 24/7 uptime
+
+---
+
+## 🚀 VPS Setup (manual, step by step)
+
+### 1. Install base packages
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rygroup-dev/kintara-bot/main/install.sh)
+sudo apt update && sudo apt install -y git nodejs npm screen
+node -v    # must be >= 18
 ```
 
-The installer clones the repo, installs dependencies, asks for **just 2 inputs** (wallet private key + Telegram bot token), writes `.env` with locked permissions, and starts the Telegram control bot.
-On `systemd` machines it installs a persistent `kintara-bot.service` with auto-restart, so Telegram control comes back automatically after a crash or reboot.
-On supported systems it will also try to install missing base dependencies like **git** and **Node.js** automatically.
+### 2. Get the code
 
-**What you get after install:**
-
-- A running **Telegram-controlled bot** on your machine, with `systemd` auto-restart when available
-- Wallet-based login with **no browser and no manual cookie handling**
-- Ready-to-use commands for farming, combat, quests, market checks, spinner, and diagnostics
-- A clean `.env` setup so you can restart later with `npm start`
-
-**Non-interactive:**
 ```bash
-WALLET_PRIVATE_KEY=your_base58_key TELEGRAM_BOT_TOKEN=123456:AA... \
-  bash <(curl -fsSL https://raw.githubusercontent.com/rygroup-dev/kintara-bot/main/install.sh)
+cd ~
+git clone https://github.com/Hobiknock/multi.git
+cd multi
+npm install
 ```
 
-> 🔒 Your private key **never leaves your machine** — it is only written to `.env` (chmod 600, git-ignored) and used to sign the game login locally. **No cookie/session needed** — the bot authenticates itself from the private key.
+### 3. Create your config
 
-## 🚀 Quick Start
+```bash
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
 
-1. Create a Telegram bot with [@BotFather](https://t.me/BotFather)
-2. Run the one-line installer on your VPS, Linux PC, macOS, or WSL shell
-3. Paste your `WALLET_PRIVATE_KEY` and `TELEGRAM_BOT_TOKEN`
-4. Open your Telegram bot
-5. Type `/start` then `/help`
-6. Run `/auto` to let the bot handle the activity loop automatically
+Fill in:
 
-## Why This Bot
+```ini
+# Telegram (from @BotFather)
+TELEGRAM_BOT_TOKEN=123456:AAxxxxxxxxxxxxxxxxxxxx
+TELEGRAM_CHAT_ID=                # optional; auto-detected on your first command
 
-- **Actually headless**: no browser automation layer, no Playwright dependency for the core flow, no fragile DOM selectors
-- **Telegram-first UX**: run, monitor, stop, inspect, and troubleshoot from chat
-- **Safer automation model**: 1 account = 1 activity, bank-first combat flow, auto-revive/keepalive, and version-watch safety checks
-- **Built for real VPS use**: one-line installer, persistent config, and clean restart path
-- **Works locally too**: not limited to VPS, as long as you run it from a compatible shell environment
+# Accounts — ONE PRIVATE KEY PER LINE, block ends with a blank line
+WALLETS=yourFirstBase58Key
+yourSecondBase58Key
+yourThirdBase58Key
 
-## 📱 Control via Telegram
+# Servers to rotate across (one per account, cycles)
+KINTARA_SERVERS=s1,s2,s3,s4
 
-After install, open your Telegram bot and type `/start`:
+# Optional: one proxy per line = one per account (strongly recommended)
+KINTARA_PROXIES=socks5://127.0.0.1:40000
+socks5://127.0.0.1:40001
+
+# Auto-bank threshold
+AUTO_BANK_MIN=10000
+```
+
+> 🔒 Keys stay on your machine in `.env` (chmod 600, git-ignored). Never commit them.
+
+### 4. Start the controller
+
+```bash
+# quick run
+npm start
+
+# or keep it alive after logout
+screen -S multi node tools/telegram-bot.js
+# detach: Ctrl+A then D
+```
+
+### 5. (Optional) Run as a systemd service — auto-restart & auto-start on boot
+
+```bash
+sudo tee /etc/systemd/system/multi.service > /dev/null <<'EOF'
+[Unit]
+Description=Multi Runner Telegram Controller
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/multi
+ExecStart=/usr/bin/node tools/telegram-bot.js
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now multi
+systemctl status multi
+```
+
+Useful:
+
+```bash
+sudo systemctl restart multi      # restart
+journalctl -u multi -f            # live logs
+tail -f recon/multi/w1.out        # per-account log
+```
+
+### 6. Updating
+
+```bash
+cd ~/multi && git pull
+sudo systemctl restart multi      # or restart your screen session
+```
+
+---
+
+## 📱 Telegram Commands
+
+Open your bot and send `/start`.
+
+### Multi-account (broadcast to all accounts)
 
 | Command | Action |
-|---------|--------|
+|---|---|
+| `/farm` | ⛏ Start the main activity on **all accounts** (shortcut) |
+| `/allmine` | ⛏ All accounts — resource gathering |
+| `/allgather` | 🪓 All accounts — wood |
+| `/allfish` | 🎣 All accounts — fishing + cooking |
+| `/allcombat` | ⚔️ All accounts — combat |
+| `/mstatus` | 📊 Status of every account |
+| `/kins` | 💰 On-chain token balance for every account (Token-2022 aware) |
+
+### Single account (classic commands)
+
+| Command | Action |
+|---|---|
 | `/fishing` | 🎣 Fishing + auto-cooking |
-| `/gather` | 🪓 Chop wood (woodcutting) |
+| `/gather` | 🪓 Chop wood |
 | `/mine` | ⛏ Mine stone + coal + metal |
-| `/combat` | ⚔️ Hunt Wilderness mobs (combat XP) |
+| `/combat` | ⚔️ Hunt mobs (bank-first, HP watch, auto-retreat) |
 | `/auto` | 🧠 Orchestrator picks the activity automatically |
-| `/stop` | ⏹️ Stop all bots |
+| `/stop` | ⏹️ Stop everything |
 | `/status` | 📊 Live status + inventory |
 | `/skills` | 📈 Skill levels & XP |
-| `/balance` | 💰 Gold / $KINS / resources |
-| `/market` | 🛒 Live market prices + interactive buy/sell flow |
+| `/balance` | 💰 Gold / token / resources |
+| `/market` | 🛒 Live prices + buy/sell flow *(locked if balance < threshold)* |
 | `/spinner` | 🎡 Claim the free daily spin (12h cooldown) |
 | `/quest` | 📋 Daily quests |
-| `/version` | 🧩 Current game/client version detected by bot |
+| `/version` | 🧩 Client version detected |
 | `/diag` | 🩺 Auth / queue / tutorial diagnostics |
 | `/server` | 🌐 Live server queues + auto-pick (lowest queue) |
 | `/help` | ❓ Command list |
 
-> **1 account = 1 activity** at a time: fishing, gathering, or combat. This is more natural and safer against anti-cheat heuristics.
-
-## ✨ Included Features
-
-- **Interactive `/market`**: shows live prices, live listings, and supports Telegram button flow for selling inventory-slot items in **gold** or **$KINS**.
-- **Daily `/spinner`**: claims the free spin wheel reward and reports cooldown / paid-spin ticker info.
-- **Smart `/auto`**: orchestrator chooses the best activity automatically instead of locking you into one loop.
-- **Realtime `/status`**: shows current bot state, inventory snapshot, balance, and spinner readiness.
-- **Auto shard picker**: every start/auto-revive joins the lowest-queue joinable server automatically (restricted servers are skipped); `/server` shows live queues.
-- **Version watchdog**: monitors game version drift and auto-pauses automation when Kintara updates.
-
-## ⚔️ Combat & Survival
-
-`/combat` hunts Wilderness mobs for combat XP with survival-first safeguards built in:
-
-- **Bank-first** — all carried loot is deposited before entering the Wilderness, so a death costs nothing.
-- **HP monitoring** — health is tracked from server vitals in real time.
-- **Auto-potion** — drinks health/shield potions when HP drops below threshold.
-- **Auto-retreat** — falls back to the safe camp and exits to the Mainland when HP is critical.
-
-## 🛠️ How It Works
-
-The bot talks to the Kintara protocol directly, with **no game render and no browser automation layer**:
-
-- **Auth**: `/api/auth/challenge` → ed25519 signature (wallet) → `/api/auth/verify` → session (`lib/walletAuth.js`).
-- **Realtime**: presence WebSocket (`wss://kintara.gg/ws/queue|presence`) — movement (`pos`), region, snapshots, harvesting (`lib/presenceWs.js`).
-- **Actions**: fishing (`act:fish` + grant-fish-xp), gathering (`harv`/`harv_hit` + action proof), cooking (Roast Pit), banking (`bankSlots`), marketplace (`/api/marketplace/sell`), daily spinner (`/api/auth/daily-spinner-spin`), combat (server-authoritative mob snapshots + `wm_ev` hits).
-
-## 📋 Requirements
-
-- Node.js ≥ 18
-- A Solana wallet (base58 private key) that **holds ≥ 1,000 $KINS** and has **completed the in-game tutorial**
-- A Telegram bot token ([@BotFather](https://t.me/BotFather)).
-- Linux VPS / server recommended for 24/7 uptime
-
-## 🧩 Manual Run
-
-```bash
-npm install
-cp .env.example .env   # fill in WALLET_PRIVATE_KEY
-npm run fish     # fishing + cooking
-npm run gather   # wood
-npm run mine     # stone/coal/metal
-npm run combat   # Wilderness hunting
-npm run auto     # orchestrator
-```
-
-`/market`, `/spinner`, `/version`, `/diag`, and the richer inline flows are exposed through the Telegram controller (`npm start` or `node tools/telegram-bot.js`).
-
-## 🩺 Troubleshooting
-
-- **Bot does not respond on Telegram**: verify `TELEGRAM_BOT_TOKEN`, then restart with `systemctl restart kintara-bot.service` (or `npm start` if you are not using `systemd`)
-- **Need live logs**: use `journalctl -u kintara-bot.service -f` on `systemd` systems, or `tail -f recon/telegram.log` on manual installs
-- **Login/auth fails**: re-check `WALLET_PRIVATE_KEY`; it must be a valid base58 Kintara wallet key
-- **Marketplace sell blocked**: your character may still be below the required seller skill, or the item is not in an inventory slot
-- **Merchant gold trade unavailable**: this is controlled server-side by Kintara, not by the bot
-
-## ⚠️ Disclaimer
-
-Automation tools may violate a game's Terms of Service. Use at your own risk — this is an educational / research project.
+> Each account runs **one activity at a time** — that's the safer pattern against automation heuristics.
 
 ---
 
-<div align="center"><sub>RY GROUP · MIT License</sub></div>
+## 🛠️ Extras
+
+**Check token balances from the shell** (no Telegram needed):
+
+```bash
+node tools/kins-check.js --env       # every account in .env
+node tools/kins-check.js <pk1> <pk2> # specific keys
+```
+
+**Run the multi-account runner directly** (without Telegram):
+
+```bash
+node tools/multi-runner.js rock      # or: tree | fish | combat | auto
+```
+
+Logs land in `recon/multi/w1.out`, `w2.out`, … (one file per account).
+
+## 🩺 Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| Bot silent on Telegram | `TELEGRAM_BOT_TOKEN` correct? → `sudo systemctl restart multi` |
+| `bootstrap attempt N failed` | Key invalid, or the account isn't registered yet |
+| Runner says "zone dry" forever | Expand `KINTARA_SERVERS`, or add proxies — a shard may be empty |
+| Balance always `0` in other tools | Use `tools/kins-check.js` — it reads **Token-2022** accounts |
+| Marketplace locked | Balance below threshold — that's the built-in safety, not a bug |
+
+## ⚠️ Disclaimer
+
+Automation tools may violate a service's Terms of Service. Use at your own risk — this is an educational / research project.
+
+---
+
+<div align="center"><sub>MIT License</sub></div>
