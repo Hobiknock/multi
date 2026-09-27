@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# install-single.sh — Installer 1 akun (1/1): clone, npm install, tulis .env SATU wallet, start bot
+# auto-1to1.sh — Installer 1 akun (1/1): clone, npm install, tulis .env SATU wallet, start bot
 # - clone repo, install deps
 # - tanya 2 input: WALLET_PRIVATE_KEY + TELEGRAM_BOT_TOKEN
-# Pakai: bash install-single.sh   (atau non-interaktif via env, lihat bawah)
+# Pakai: bash auto-1to1.sh   (atau non-interaktif via env, lihat bawah)
 set -e
 
 REPO_URL="${REPO_URL:-https://github.com/Hobiknock/multi.git}"
-DIR="${INSTALL_DIR:-$HOME/multi-single}"
+DIR="${INSTALL_DIR:-$HOME/multi-1to1}"
 
 echo "=============================================="
 echo "  Multi Runner — installer SINGLE ACCOUNT"
@@ -70,7 +70,7 @@ EOF
 chmod 600 .env
 echo "[✓] .env ditulis (chmod 600, single wallet)"
 
-# ---- nama service: multi-single (1 akun / 1 server) ----
+# ---- nama service: multi-1to1 (1 akun / 1 server) ----
 SVC="multi-1to1"
 echo "[*] Service name: $SVC"
 
